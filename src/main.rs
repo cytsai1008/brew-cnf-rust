@@ -4,6 +4,10 @@ use std::process;
 use std::time::SystemTime;
 
 fn executables_txt_path() -> PathBuf {
+    if let Ok(p) = std::env::var("HOMEBREW_CACHE") {
+        return PathBuf::from(p).join("api/internal/executables.txt");
+    }
+
     #[cfg(target_os = "macos")]
     let cache = dirs::home_dir()
         .expect("cannot determine home directory")
@@ -25,6 +29,9 @@ fn executables_txt_path() -> PathBuf {
 fn cellar_path() -> PathBuf {
     if let Ok(p) = std::env::var("HOMEBREW_CELLAR") {
         return PathBuf::from(p);
+    }
+    if let Ok(p) = std::env::var("HOMEBREW_PREFIX") {
+        return PathBuf::from(p).join("Cellar");
     }
 
     #[cfg(target_os = "macos")]
@@ -108,7 +115,7 @@ fn search(db_path: &Path, cmd: &str, cellar: &Path) -> Vec<String> {
 }
 
 fn print_usage() {
-    eprintln!("Usage: brew-cnf [--update] [--no-warn] <command>");
+    eprintln!("Usage: brew-cnf [--update] [--no-warn] <command>...");
     eprintln!("       brew-cnf --update   refresh Homebrew's executables database");
     eprintln!(
         "       brew-cnf --init [--update] [--no-warn]   print shell hook (eval in .zshrc/.bashrc)"
@@ -143,6 +150,7 @@ fn print_init(flag_update: bool, flag_no_warn: bool) {
         \x20 if [ -z \"${{HOMEBREW_COMMAND_NOT_FOUND_CI}}\" ] && {{ [ -n \"${{MC_SID}}\" ] || [ ! -t 1 ]; }}; then\n\
         \x20   return 127\n\
         \x20 fi\n\
+        \x20 case \"$1\" in -*) return 127 ;; esac\n\
         \x20 echo >&2\n\
         \x20 brew-cnf{} \"$1\"\n\
         \x20 return 127\n\
@@ -155,6 +163,7 @@ fn print_init(flag_update: bool, flag_no_warn: bool) {
         \x20 if [ -z \"${{HOMEBREW_COMMAND_NOT_FOUND_CI}}\" ] && {{ [ -n \"${{MC_SID}}\" ] || [ ! -t 1 ]; }}; then\n\
         \x20   return 127\n\
         \x20 fi\n\
+        \x20 case \"$1\" in -*) return 127 ;; esac\n\
         \x20 echo >&2\n\
         \x20 brew-cnf{} \"$1\"\n\
         \x20 return 127\n\
@@ -176,8 +185,21 @@ fn run_brew_update(no_warn: bool) -> bool {
     ok
 }
 
+fn print_matches(cmd: &str, formulae: &[String]) {
+    if formulae.len() == 1 {
+        println!("The program '{cmd}' is currently not installed. You can install it by typing:");
+        println!("  brew install {}", formulae[0]);
+    } else {
+        println!("The program '{cmd}' can be found in the following formulae:");
+        for f in formulae {
+            println!("  * {f}");
+        }
+        println!("Try: brew install <selected formula>");
+    }
+}
+
 fn main() {
-    let mut cmd_arg: Option<String> = None;
+    let mut cmd_args: Vec<String> = Vec::new();
     let mut flag_update = false;
     let mut flag_no_warn = false;
     let mut flag_init = false;
@@ -197,12 +219,7 @@ fn main() {
                 process::exit(1);
             }
             _ => {
-                if cmd_arg.is_some() {
-                    eprintln!("brew-cnf: too many arguments");
-                    print_usage();
-                    process::exit(1);
-                }
-                cmd_arg = Some(arg);
+                cmd_args.push(arg);
             }
         }
     }
@@ -215,26 +232,23 @@ fn main() {
     let no_warn = flag_no_warn || std::env::var("HOMEBREW_NO_CNF_WARN").is_ok_and(|v| v == "1");
     let db_path = executables_txt_path();
 
-    let cmd = match cmd_arg {
-        Some(c) => c,
-        None => {
-            if flag_update {
-                let ok = run_brew_update(no_warn);
-                if ok && db_path.exists() {
-                    process::exit(0);
-                }
-                if ok && !no_warn {
-                    eprintln!(
-                        "brew-cnf: warning: executables database not found at {}",
-                        db_path.display()
-                    );
-                }
-                process::exit(1);
+    if cmd_args.is_empty() {
+        if flag_update {
+            let ok = run_brew_update(no_warn);
+            if ok && db_path.exists() {
+                process::exit(0);
             }
-            print_usage();
+            if ok && !no_warn {
+                eprintln!(
+                    "brew-cnf: warning: executables database not found at {}",
+                    db_path.display()
+                );
+            }
             process::exit(1);
         }
-    };
+        print_usage();
+        process::exit(1);
+    }
 
     if !db_path.exists() {
         if flag_update {
@@ -270,20 +284,11 @@ fn main() {
     }
 
     let cellar = cellar_path();
-    let formulae = search(&db_path, &cmd, &cellar);
-
-    if formulae.is_empty() {
-        process::exit(1);
-    }
-
-    if formulae.len() == 1 {
-        println!("The program '{cmd}' is currently not installed. You can install it by typing:");
-        println!("  brew install {}", formulae[0]);
-    } else {
-        println!("The program '{cmd}' can be found in the following formulae:");
-        for f in &formulae {
-            println!("  * {f}");
+    for cmd in &cmd_args {
+        let formulae = search(&db_path, cmd, &cellar);
+        if formulae.is_empty() {
+            process::exit(1);
         }
-        println!("Try: brew install <selected formula>");
+        print_matches(cmd, &formulae);
     }
 }
