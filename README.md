@@ -69,11 +69,11 @@ eval "$(brew-cnf --init)"
 `brew-cnf --init` prints:
 
 ```sh
-command_not_found_handler() { brew-cnf "$1" || echo "zsh: command not found: $*" >&2; return 127; }
-command_not_found_handle() { brew-cnf "$1" || echo "bash: $1: command not found" >&2; return 127; }
+command_not_found_handler() { echo "zsh: command not found: $1" >&2; echo >&2; brew-cnf "$1"; return 127; }
+command_not_found_handle() { echo "bash: $1: command not found" >&2; echo >&2; brew-cnf "$1"; return 127; }
 ```
 
-`eval` installs both into your shell (`command_not_found_handler` for zsh, `command_not_found_handle` for bash — each shell ignores the other's name). The handlers return 127 (the conventional exit code for "command not found") and print the shell's standard error message when no formula is found, since the shell suppresses its own output once a handler is defined. The hook definition stays in the binary, so it updates automatically when you upgrade `brew-cnf`.
+`eval` installs both into your shell (`command_not_found_handler` for zsh, `command_not_found_handle` for bash — each shell ignores the other's name). The handlers return 127 (the conventional exit code for "command not found") and always print the shell's standard error message, since the shell suppresses its own output once a handler is defined. When appropriate for an interactive shell, `brew-cnf` also adds Homebrew formula suggestions. The hook definition stays in the binary, so it updates automatically when you upgrade `brew-cnf`.
 
 ## How it works
 

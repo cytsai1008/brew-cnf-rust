@@ -58,7 +58,10 @@ fn staleness_threshold_secs() -> u64 {
 
 fn file_age_secs(path: &Path) -> Option<u64> {
     let mtime = path.metadata().ok()?.modified().ok()?;
-    SystemTime::now().duration_since(mtime).ok().map(|d| d.as_secs())
+    SystemTime::now()
+        .duration_since(mtime)
+        .ok()
+        .map(|d| d.as_secs())
 }
 
 fn is_installed(cellar: &Path, formula: &str) -> bool {
@@ -78,7 +81,9 @@ fn search(db_path: &Path, cmd: &str, cellar: &Path) -> Vec<String> {
     let mut matches = vec![];
 
     for line in content.lines() {
-        let Some(colon) = line.find(':') else { continue };
+        let Some(colon) = line.find(':') else {
+            continue;
+        };
         let formula_raw = &line[..colon];
         let exes = &line[colon + 1..];
 
@@ -93,7 +98,7 @@ fn search(db_path: &Path, cmd: &str, cellar: &Path) -> Vec<String> {
         let found = exes == cmd
             || exes.contains(needle.as_str())
             || exes.starts_with(&needle[1..])                 // cmd at start: "cmd ..."
-            || exes.ends_with(&needle[..needle.len() - 1]);   // cmd at end:   "... cmd"
+            || exes.ends_with(&needle[..needle.len() - 1]); // cmd at end:   "... cmd"
         if found && !is_installed(cellar, formula) {
             matches.push(formula.to_string());
         }
@@ -106,7 +111,9 @@ fn print_usage() {
     eprintln!("Usage: brew-cnf [--update] [--no-warn] <command>");
     eprintln!("       brew-cnf --init   print shell hook (eval in .zshrc/.bashrc)");
     eprintln!("       HOMEBREW_NO_CNF_WARN=1  suppress stale-database warning");
-    eprintln!("       HOMEBREW_API_AUTO_UPDATE_SECS=N  staleness threshold (default: 604800 = 7 days)");
+    eprintln!(
+        "       HOMEBREW_API_AUTO_UPDATE_SECS=N  staleness threshold (default: 604800 = 7 days)"
+    );
 }
 
 fn print_init() {
@@ -116,19 +123,23 @@ fn print_init() {
     // unless HOMEBREW_COMMAND_NOT_FOUND_CI is set (matches official Homebrew handler).
     println!(
         "command_not_found_handler() {{\n\
+        \x20 echo \"zsh: command not found: $1\" >&2\n\
         \x20 if [ -z \"${{HOMEBREW_COMMAND_NOT_FOUND_CI}}\" ] && {{ [ -n \"${{MC_SID}}\" ] || [ ! -t 1 ]; }}; then\n\
-        \x20   echo \"zsh: command not found: $1\" >&2; return 127\n\
+        \x20   return 127\n\
         \x20 fi\n\
-        \x20 brew-cnf \"$1\" || echo \"zsh: command not found: $1\" >&2\n\
+        \x20 echo >&2\n\
+        \x20 brew-cnf \"$1\"\n\
         \x20 return 127\n\
         }}"
     );
     println!(
         "command_not_found_handle() {{\n\
+        \x20 echo \"bash: $1: command not found\" >&2\n\
         \x20 if [ -z \"${{HOMEBREW_COMMAND_NOT_FOUND_CI}}\" ] && {{ [ -n \"${{MC_SID}}\" ] || [ ! -t 1 ]; }}; then\n\
-        \x20   echo \"bash: $1: command not found\" >&2; return 127\n\
+        \x20   return 127\n\
         \x20 fi\n\
-        \x20 brew-cnf \"$1\" || echo \"bash: $1: command not found\" >&2\n\
+        \x20 echo >&2\n\
+        \x20 brew-cnf \"$1\"\n\
         \x20 return 127\n\
         }}"
     );
