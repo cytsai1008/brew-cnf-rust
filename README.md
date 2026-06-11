@@ -43,6 +43,7 @@ Exits `0` when a formula is found, `1` when not found (so the shell falls throug
 
 | Flag | Description |
 |---|---|
+| `--init` | Print the shell hook for `eval` in `.zshrc` / `.bashrc` |
 | `--update` | Run `brew update --auto-update` if the database is stale before searching |
 | `--no-warn` | Suppress the stale database warning |
 | `--help` | Show usage |
@@ -56,37 +57,22 @@ Exits `0` when a formula is found, `1` when not found (so the shell falls throug
 | `HOMEBREW_CELLAR` | Override the Cellar path |
 | `HOMEBREW_BREW_FILE` | Override the `brew` binary path (used with `--update`) |
 
-## Hook integration
+## Shell integration
 
-Find your Homebrew `handler.sh`:
-
-```sh
-brew command-not-found-init
-```
-
-In your `.zshrc` or `.bashrc`, source `handler.sh` then override the inner function to use `brew-cnf` with a fallback:
+Add one line to your `.zshrc` or `.bashrc` — no need to touch Homebrew's `handler.sh`:
 
 ```sh
-source "$(brew --repository)/Library/Homebrew/command-not-found/handler.sh"
-
-homebrew_command_not_found_handle() {
-  local cmd="$1"
-  local txt
-  if command -v brew-cnf &>/dev/null; then
-    txt="$(brew-cnf "${cmd}" 2>/dev/null)"
-  else
-    txt="$(brew which-formula --explain "${cmd}" 2>/dev/null)"
-  fi
-
-  if [[ -z "${txt}" ]]; then
-    [[ -n "${ZSH_VERSION}" ]] && echo "zsh: command not found: ${cmd}" >&2
-    [[ -n "${BASH_VERSION}" ]] && echo "${cmd}: command not found" >&2
-  else
-    echo "${txt}"
-  fi
-  return 127
-}
+eval "$(brew-cnf --init)"
 ```
+
+`brew-cnf --init` prints:
+
+```sh
+command_not_found_handler() { brew-cnf "$1" || echo "zsh: command not found: $*" >&2; return 127; }
+command_not_found_handle() { brew-cnf "$1" || echo "bash: $1: command not found" >&2; return 127; }
+```
+
+`eval` installs both into your shell (`command_not_found_handler` for zsh, `command_not_found_handle` for bash — each shell ignores the other's name). The handlers return 127 (the conventional exit code for "command not found") and print the shell's standard error message when no formula is found, since the shell suppresses its own output once a handler is defined. The hook definition stays in the binary, so it updates automatically when you upgrade `brew-cnf`.
 
 ## How it works
 
