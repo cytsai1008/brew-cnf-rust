@@ -25,7 +25,7 @@ cargo build --release # optimized
 
 **No subprocess for path resolution.** The path to `executables.txt` is derived from OS conventions directly in Rust (`~/Library/Caches/Homebrew` on macOS, `$XDG_CACHE_HOME/Homebrew` on Linux) rather than calling `brew --cache`. `$HOMEBREW_CELLAR` env var overrides the Cellar path.
 
-**No auto-update.** The binary never triggers `brew update`. If the database is stale (older than `$HOMEBREW_API_AUTO_UPDATE_SECS`, default 450s), it warns to stderr and continues. `--update` flag opts in to triggering `brew update --auto-update`. `HOMEBREW_NO_CNF_WARN=1` or `--no-warn` silences the warning.
+**No auto-update by default.** The binary never triggers `brew update` unless explicitly requested. If the database is stale (older than `$HOMEBREW_API_AUTO_UPDATE_SECS`, default 604800s / 7 days), it warns to stderr and continues. `--update` opts in to triggering `brew update --auto-update`; with no command it refreshes the database and exits. `HOMEBREW_NO_CNF_WARN=1` or `--no-warn` silences `brew-cnf` warnings but does not hide Homebrew's own update output.
 
 **Output is identical to Homebrew's.** Same stdout strings, same exit codes (0 on match, 1 on no match or missing DB). The warning goes to stderr only so `handler.sh`'s `$()` capture is never contaminated.
 

@@ -125,18 +125,19 @@ The official Homebrew handler triggers `brew update --auto-update` when `executa
 
 | Condition | Default behavior |
 |---|---|
-| File fresh (< 450s) | Search normally, no noise |
-| File stale (≥ 450s) | Search normally, print warning to stderr |
-| File missing | Exit 1 silently (fall through to shell's default message) |
-| `--update` flag passed | Run `brew update --auto-update` if stale, then search |
+| File fresh (< 604800s) | Search normally, no noise |
+| File stale (≥ 604800s) | Search normally, print warning to stderr |
+| File missing | Warn to stderr and exit 1 (fall through to shell's default message) |
+| `--update` flag passed | Run `brew update --auto-update` if missing/stale, then search |
+| `--update` with no command | Run `brew update --auto-update`, then exit 0 only if `executables.txt` exists |
 
-**Staleness threshold** defaults to 450s, matching Homebrew. Override with `$HOMEBREW_API_AUTO_UPDATE_SECS`.
+**Staleness threshold** defaults to 604800s (7 days). Override with `$HOMEBREW_API_AUTO_UPDATE_SECS`.
 
-**Disable the stale warning** by setting `HOMEBREW_NO_CNF_WARN=1`.
+**Disable `brew-cnf` warnings** by setting `HOMEBREW_NO_CNF_WARN=1`.
 
 **Flags:**
-- `--update` — trigger `brew update --auto-update` when file is stale (disabled by default)
-- `--no-warn` — suppress the stale warning (same effect as `HOMEBREW_NO_CNF_WARN=1`)
+- `--update` — trigger `brew update --auto-update` when file is missing/stale, or refresh and exit when no command is provided (disabled by default)
+- `--no-warn` — suppress `brew-cnf` warnings (same effect as `HOMEBREW_NO_CNF_WARN=1`), without hiding Homebrew's own update output
 
 The warning is printed to **stderr** so it never contaminates the stdout text that `handler.sh` captures and echoes to the user.
 

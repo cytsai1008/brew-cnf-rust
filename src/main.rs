@@ -109,14 +109,30 @@ fn search(db_path: &Path, cmd: &str, cellar: &Path) -> Vec<String> {
 
 fn print_usage() {
     eprintln!("Usage: brew-cnf [--update] [--no-warn] <command>");
-    eprintln!("       brew-cnf --init   print shell hook (eval in .zshrc/.bashrc)");
+    eprintln!("       brew-cnf --update   refresh Homebrew's executables database");
+    eprintln!(
+        "       brew-cnf --init [--update] [--no-warn]   print shell hook (eval in .zshrc/.bashrc)"
+    );
     eprintln!("       HOMEBREW_NO_CNF_WARN=1  suppress stale-database warning");
     eprintln!(
         "       HOMEBREW_API_AUTO_UPDATE_SECS=N  staleness threshold (default: 604800 = 7 days)"
     );
 }
 
-fn print_init() {
+fn print_init(flag_update: bool, flag_no_warn: bool) {
+    let mut lookup_args = Vec::new();
+    if flag_update {
+        lookup_args.push("--update");
+    }
+    if flag_no_warn {
+        lookup_args.push("--no-warn");
+    }
+    let lookup_args = if lookup_args.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", lookup_args.join(" "))
+    };
+
     // zsh uses command_not_found_handler; bash uses command_not_found_handle.
     // Defining both is harmless — each shell ignores the other's name.
     // CI skip: suppress lookup when inside a pipe or Midnight Commander (MC_SID),
@@ -128,9 +144,10 @@ fn print_init() {
         \x20   return 127\n\
         \x20 fi\n\
         \x20 echo >&2\n\
-        \x20 brew-cnf \"$1\"\n\
+        \x20 brew-cnf{} \"$1\"\n\
         \x20 return 127\n\
-        }}"
+        }}",
+        lookup_args
     );
     println!(
         "command_not_found_handle() {{\n\
@@ -139,25 +156,37 @@ fn print_init() {
         \x20   return 127\n\
         \x20 fi\n\
         \x20 echo >&2\n\
-        \x20 brew-cnf \"$1\"\n\
+        \x20 brew-cnf{} \"$1\"\n\
         \x20 return 127\n\
-        }}"
+        }}",
+        lookup_args
     );
+}
+
+fn run_brew_update(no_warn: bool) -> bool {
+    let brew = std::env::var("HOMEBREW_BREW_FILE").unwrap_or_else(|_| "brew".into());
+    let ok = process::Command::new(&brew)
+        .args(["update", "--auto-update"])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if !ok && !no_warn {
+        eprintln!("brew-cnf: warning: `brew update --auto-update` failed");
+    }
+    ok
 }
 
 fn main() {
     let mut cmd_arg: Option<String> = None;
     let mut flag_update = false;
     let mut flag_no_warn = false;
+    let mut flag_init = false;
 
     for arg in std::env::args().skip(1) {
         match arg.as_str() {
             "--update" => flag_update = true,
             "--no-warn" => flag_no_warn = true,
-            "--init" => {
-                print_init();
-                process::exit(0);
-            }
+            "--init" => flag_init = true,
             "-h" | "--help" => {
                 print_usage();
                 process::exit(0);
@@ -178,37 +207,57 @@ fn main() {
         }
     }
 
+    if flag_init {
+        print_init(flag_update, flag_no_warn);
+        process::exit(0);
+    }
+
+    let no_warn = flag_no_warn || std::env::var("HOMEBREW_NO_CNF_WARN").is_ok_and(|v| v == "1");
+    let db_path = executables_txt_path();
+
     let cmd = match cmd_arg {
         Some(c) => c,
         None => {
+            if flag_update {
+                let ok = run_brew_update(no_warn);
+                if ok && db_path.exists() {
+                    process::exit(0);
+                }
+                if ok && !no_warn {
+                    eprintln!(
+                        "brew-cnf: warning: executables database not found at {}",
+                        db_path.display()
+                    );
+                }
+                process::exit(1);
+            }
             print_usage();
             process::exit(1);
         }
     };
 
-    let db_path = executables_txt_path();
+    if !db_path.exists() {
+        if flag_update {
+            run_brew_update(no_warn);
+        }
+    }
 
     if !db_path.exists() {
+        if !no_warn {
+            eprintln!(
+                "brew-cnf: warning: executables database not found at {}",
+                db_path.display()
+            );
+        }
         process::exit(1);
     }
 
     let threshold = staleness_threshold_secs();
-    let no_warn = flag_no_warn || std::env::var("HOMEBREW_NO_CNF_WARN").is_ok_and(|v| v == "1");
 
     if let Some(age) = file_age_secs(&db_path) {
         if age >= threshold {
             if flag_update {
-                let brew = std::env::var("HOMEBREW_BREW_FILE").unwrap_or_else(|_| "brew".into());
-                let ok = process::Command::new(&brew)
-                    .args(["update", "--auto-update"])
-                    .stdout(process::Stdio::null())
-                    .stderr(process::Stdio::null())
-                    .status()
-                    .map(|s| s.success())
-                    .unwrap_or(false);
-                if !ok {
-                    eprintln!("brew-cnf: warning: `brew update --auto-update` failed");
-                }
+                run_brew_update(no_warn);
             } else if !no_warn {
                 let age_mins = age / 60;
                 eprintln!(

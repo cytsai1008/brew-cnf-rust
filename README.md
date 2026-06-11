@@ -45,16 +45,25 @@ Exits `0` when a formula is found, `1` when not found (so the shell falls throug
 | Flag | Description |
 |---|---|
 | `--init` | Print the shell hook for `eval` in `.zshrc` / `.bashrc` |
-| `--update` | Run `brew update --auto-update` if the database is stale before searching |
+| `--update` | Refresh the executables database, or run `brew update --auto-update` if the database is missing/stale before searching |
 | `--no-warn` | Suppress the stale database warning |
 | `--help` | Show usage |
+
+When used with `--init`, `--update` and `--no-warn` are preserved in the generated shell hook:
+
+```sh
+eval "$(brew-cnf --init --no-warn)"
+eval "$(brew-cnf --init --update)"
+```
+
+`brew-cnf --update` without a command refreshes Homebrew's executables database and exits. It exits `0` only when `brew update --auto-update` succeeds and the database exists afterward.
 
 ## Environment variables
 
 | Variable | Description |
 |---|---|
-| `HOMEBREW_NO_CNF_WARN=1` | Suppress the stale database warning (same as `--no-warn`) |
-| `HOMEBREW_API_AUTO_UPDATE_SECS` | Staleness threshold in seconds (default: 450) |
+| `HOMEBREW_NO_CNF_WARN=1` | Suppress `brew-cnf` warnings (same as `--no-warn`) |
+| `HOMEBREW_API_AUTO_UPDATE_SECS` | Staleness threshold in seconds (default: 604800 = 7 days) |
 | `HOMEBREW_CELLAR` | Override the Cellar path |
 | `HOMEBREW_BREW_FILE` | Override the `brew` binary path (used with `--update`) |
 
