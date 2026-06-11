@@ -14,6 +14,7 @@ When you type an unknown command in your shell, Homebrew's command-not-found han
 
 ```sh
 brew tap cytsai1008/tap
+brew trust cytsai1008/tap
 brew install brew-cnf
 ```
 
