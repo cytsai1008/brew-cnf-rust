@@ -1,6 +1,6 @@
 # brew-cnf
 
-A fast replacement for Homebrew's `brew which-formula --explain`, written in Rust.
+A fast replacement for Homebrew's `brew command-not-found`, written in Rust.
 
 When you type an unknown command in your shell, Homebrew's command-not-found handler suggests which formula to install. The built-in handler invokes the full `brew` Ruby process for every typo — costing ~700ms. This binary does the same lookup in ~5ms.
 
@@ -59,7 +59,7 @@ Exits `0` when a formula is found, `1` when not found (so the shell falls throug
 
 ## Shell integration
 
-Add one line to your `.zshrc` or `.bashrc` — no need to touch Homebrew's `handler.sh`:
+Add one line to your `.zshrc` or `.bashrc`:
 
 ```sh
 eval "$(brew-cnf --init)"
