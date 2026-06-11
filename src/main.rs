@@ -112,11 +112,26 @@ fn print_usage() {
 fn print_init() {
     // zsh uses command_not_found_handler; bash uses command_not_found_handle.
     // Defining both is harmless — each shell ignores the other's name.
-    // Both must return 127 (the conventional exit code for "command not found")
-    // and must print the "not found" message themselves when brew-cnf finds nothing,
-    // because once the handler is defined the shell suppresses its own error output.
-    println!("command_not_found_handler() {{ brew-cnf \"$1\" || echo \"zsh: command not found: $*\" >&2; return 127; }}");
-    println!("command_not_found_handle() {{ brew-cnf \"$1\" || echo \"bash: $1: command not found\" >&2; return 127; }}");
+    // CI skip: suppress lookup when inside a pipe or Midnight Commander (MC_SID),
+    // unless HOMEBREW_COMMAND_NOT_FOUND_CI is set (matches official Homebrew handler).
+    println!(
+        "command_not_found_handler() {{\n\
+        \x20 if [ -z \"${{HOMEBREW_COMMAND_NOT_FOUND_CI}}\" ] && {{ [ -n \"${{MC_SID}}\" ] || [ ! -t 1 ]; }}; then\n\
+        \x20   echo \"zsh: command not found: $1\" >&2; return 127\n\
+        \x20 fi\n\
+        \x20 brew-cnf \"$1\" || echo \"zsh: command not found: $1\" >&2\n\
+        \x20 return 127\n\
+        }}"
+    );
+    println!(
+        "command_not_found_handle() {{\n\
+        \x20 if [ -z \"${{HOMEBREW_COMMAND_NOT_FOUND_CI}}\" ] && {{ [ -n \"${{MC_SID}}\" ] || [ ! -t 1 ]; }}; then\n\
+        \x20   echo \"bash: $1: command not found\" >&2; return 127\n\
+        \x20 fi\n\
+        \x20 brew-cnf \"$1\" || echo \"bash: $1: command not found\" >&2\n\
+        \x20 return 127\n\
+        }}"
+    );
 }
 
 fn main() {
