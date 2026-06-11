@@ -38,7 +38,15 @@ fn cellar_path() -> PathBuf {
     }
 
     #[cfg(not(target_os = "macos"))]
-    PathBuf::from("/home/linuxbrew/.linuxbrew/Cellar")
+    {
+        let system = PathBuf::from("/home/linuxbrew/.linuxbrew/Cellar");
+        if system.exists() {
+            return system;
+        }
+        dirs::home_dir()
+            .expect("cannot determine home directory")
+            .join(".linuxbrew/Cellar")
+    }
 }
 
 fn staleness_threshold_secs() -> u64 {
