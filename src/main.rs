@@ -145,9 +145,8 @@ fn print_init(flag_update: bool, flag_no_warn: bool) {
         \x20 if [ -z \"${{HOMEBREW_COMMAND_NOT_FOUND_CI}}\" ] && {{ [ -n \"${{MC_SID}}\" ] || [ ! -t 1 ]; }}; then\n\
         \x20   return 127\n\
         \x20 fi\n\
-        \x20 case \"$1\" in -*) return 127 ;; esac\n\
         \x20 echo >&2\n\
-        \x20 brew-cnf{} \"$1\"\n\
+        \x20 brew-cnf{} -- \"$1\"\n\
         \x20 return 127\n\
         }}",
         lookup_args
@@ -158,9 +157,8 @@ fn print_init(flag_update: bool, flag_no_warn: bool) {
         \x20 if [ -z \"${{HOMEBREW_COMMAND_NOT_FOUND_CI}}\" ] && {{ [ -n \"${{MC_SID}}\" ] || [ ! -t 1 ]; }}; then\n\
         \x20   return 127\n\
         \x20 fi\n\
-        \x20 case \"$1\" in -*) return 127 ;; esac\n\
         \x20 echo >&2\n\
-        \x20 brew-cnf{} \"$1\"\n\
+        \x20 brew-cnf{} -- \"$1\"\n\
         \x20 return 127\n\
         }}",
         lookup_args
@@ -446,8 +444,16 @@ fn main() {
     let mut flag_no_warn = false;
     let mut flag_init = false;
     let mut flag_explain = false;
+    let mut end_of_opts = false;
+    let mut saw_bare_dash = false;
 
-    for arg in std::env::args().skip(1) {
+    let raw_args: Vec<String> = std::env::args().skip(1).collect();
+
+    for arg in &raw_args {
+        if end_of_opts {
+            cmd_args.push(arg.clone());
+            continue;
+        }
         match arg.as_str() {
             "--update" => flag_update = true,
             "--no-warn" => flag_no_warn = true,
@@ -457,14 +463,20 @@ fn main() {
                 print_usage();
                 process::exit(0);
             }
-            "-" | "--" => {}
+            // `--` ends option parsing; everything after is a lookup target.
+            "--" => {
+                end_of_opts = true;
+                saw_bare_dash = true;
+            }
+            // bare `-` is a shell idiom (stdin), not a command to look up
+            "-" => saw_bare_dash = true,
             _ if arg.starts_with('-') => {
                 eprintln!("brew-cnf: unknown flag: {arg}");
                 print_usage();
                 process::exit(1);
             }
             _ => {
-                cmd_args.push(arg);
+                cmd_args.push(arg.clone());
             }
         }
     }
@@ -489,6 +501,14 @@ fn main() {
                     db_path.display()
                 );
             }
+            process::exit(1);
+        }
+        // Bare `-` or standalone `--` with no real command: silently exit.
+        if saw_bare_dash {
+            process::exit(0);
+        }
+        if raw_args.is_empty() {
+            print_usage();
             process::exit(1);
         }
         print_usage();

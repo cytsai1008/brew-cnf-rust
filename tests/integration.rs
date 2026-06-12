@@ -287,6 +287,143 @@ fn unknown_flag_exits_1() {
     assert_eq!(out.status.code(), Some(1));
 }
 
+// ── bare dash / end-of-options (`--`) ────────────────────────────────────────
+
+#[test]
+fn bare_dash_exits_0_silently() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = Command::new(bin())
+        .args(["-"])
+        .env("HOMEBREW_CACHE", dir.path())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "bare `-` should exit 0");
+    assert!(std::str::from_utf8(&out.stdout).unwrap().is_empty());
+    assert!(std::str::from_utf8(&out.stderr).unwrap().is_empty());
+}
+
+#[test]
+fn bare_double_dash_exits_0_silently() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = Command::new(bin())
+        .args(["--"])
+        .env("HOMEBREW_CACHE", dir.path())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "bare `--` should exit 0");
+    assert!(std::str::from_utf8(&out.stdout).unwrap().is_empty());
+    assert!(std::str::from_utf8(&out.stderr).unwrap().is_empty());
+}
+
+#[test]
+fn end_of_opts_flag_like_cmd_exits_1_silently() {
+    // In shell integration the hook calls `brew-cnf --explain -- $cmd`.
+    // When $cmd looks like a flag (--help, -h, --), it should be treated as a
+    // lookup target, find no match, and exit 1 with no output.
+    let fx = Fixture::new(DB);
+    for flag_cmd in &["--help", "-h", "--", "-"] {
+        let out = fx.run(&["--explain", "--", flag_cmd]);
+        assert_eq!(
+            out.status.code(),
+            Some(1),
+            "`brew-cnf --explain -- {flag_cmd}` should exit 1"
+        );
+        assert!(
+            std::str::from_utf8(&out.stdout).unwrap().is_empty(),
+            "`brew-cnf --explain -- {flag_cmd}` should produce no stdout"
+        );
+    }
+}
+
+#[test]
+fn end_of_opts_flag_like_cmd_status_mode_exits_1_silently() {
+    // Same as the --explain variant but in default status mode.
+    let fx = Fixture::new(DB);
+    for flag_cmd in &["--help", "-h", "--", "-"] {
+        let out = fx.run(&["--", flag_cmd]);
+        assert_eq!(
+            out.status.code(),
+            Some(1),
+            "`brew-cnf -- {flag_cmd}` should exit 1"
+        );
+        assert!(
+            std::str::from_utf8(&out.stdout).unwrap().is_empty(),
+            "`brew-cnf -- {flag_cmd}` should produce no stdout"
+        );
+    }
+}
+
+#[test]
+fn end_of_opts_real_cmd_still_found() {
+    // `--` must not prevent valid lookups in either mode.
+    let fx = Fixture::new(DB);
+    let out = fx.run(&["--explain", "--", "baz"]);
+    assert!(out.status.success());
+    assert!(stdout(&out).contains("brew install baz"));
+
+    let out = fx.run(&["--", "baz"]);
+    assert!(out.status.success());
+}
+
+// ── shell-hook invocation pattern (`--explain -- <cmd>`) ─────────────────────
+// These mirror exactly what the generated hook emits: `brew-cnf --explain -- "$1"`.
+
+#[test]
+fn hook_invocation_single_match() {
+    let fx = Fixture::new(DB);
+    let out = fx.run(&["--explain", "--", "baz"]);
+    assert!(out.status.success());
+    assert_eq!(
+        stdout(&out),
+        "The program 'baz' is currently not installed. You can install it by typing:\n  brew install baz"
+    );
+    assert!(stderr(&out).is_empty());
+}
+
+#[test]
+fn hook_invocation_multi_formula() {
+    // "aaa" appears in the "multi" formula's exe list
+    let fx = Fixture::new(DB);
+    let out = fx.run(&["--explain", "--", "aaa"]);
+    assert!(out.status.success());
+    assert!(stdout(&out).contains("brew install multi"));
+    assert!(stderr(&out).is_empty());
+}
+
+#[test]
+fn hook_invocation_no_match() {
+    let fx = Fixture::new(DB);
+    let out = fx.run(&["--explain", "--", "nothere"]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(stdout(&out).is_empty());
+    assert!(stderr(&out).is_empty());
+}
+
+#[test]
+fn hook_invocation_already_installed() {
+    let fx = Fixture::new(DB);
+    fx.install("baz");
+    let out = fx.run(&["--explain", "--", "baz"]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(stdout(&out).is_empty());
+}
+
+#[test]
+fn init_hook_uses_double_dash_separator() {
+    // The generated hook must pass `-- "$1"` so flag-like commands are treated
+    // as lookup targets, not as brew-cnf flags.
+    let out = Command::new(bin()).args(["--init"]).output().unwrap();
+    let text = std::str::from_utf8(&out.stdout).unwrap();
+    assert!(
+        text.contains("brew-cnf --explain -- \"$1\""),
+        "hook must use `-- \"$1\"` separator; got:\n{text}"
+    );
+    assert!(
+        !text.contains("case \"$1\" in"),
+        "hook must not contain the old `-*` case guard"
+    );
+}
+
 // ── --init ────────────────────────────────────────────────────────────────────
 
 #[test]
