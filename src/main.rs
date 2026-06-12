@@ -457,6 +457,7 @@ fn main() {
                 print_usage();
                 process::exit(0);
             }
+            "-" | "--" => {}
             _ if arg.starts_with('-') => {
                 eprintln!("brew-cnf: unknown flag: {arg}");
                 print_usage();
